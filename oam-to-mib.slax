@@ -1,0 +1,237 @@
+/*
+ *
+ * Creation date: 17th of July, 2015
+ * Version: 1.0
+ */
+ 
+version 1.0;
+
+ns junos = "http://xml.juniper.net/junos/*/junos";
+ns xnm = "http://xml.juniper.net/xnm/1.1/xnm";
+ns jcs = "http://xml.juniper.net/junos/commit-scripts/1.0";
+
+
+import "../import/junos.xsl";
+
+match / {
+    <op-script-results> {
+
+		var $rpc-config-req = {
+			<get-configuration database="committed" inherit="inherit"> {
+			   <configuration> {
+				 <protocols> {
+					 <oam> {
+						 <ethernet> {
+							 <connectivity-fault-management>;
+						 }
+					 }
+				 }
+			   }
+			}
+		}
+
+		var $connection = jcs:open();
+		var $oam-config = jcs:execute($connection, $rpc-config-req);
+			
+       /* Iterate the configuration to find out the following elements:
+	   * 	- maintenance-domain
+	   *    - maintenance-association
+	   *	- sla-iterator-profile
+       */
+	   for-each ($oam-config/protocols/oam/ethernet/connectivity-fault-management/maintenance-domain/maintenance-association/mep/remote-mep/sla-iterator-profile) {
+	   
+			var $md = ../../../../name;
+			var $ma = ../../../name;
+			var $mep = ../../name;
+			var $rmep = ../name;
+			var $sla = ./name;
+			
+			var $rpc-oam-get-sla-statistics = {
+				<get-cfm-iterator-statistics> {
+					<sla-iterator> $sla;
+					<maintenance-domain> $md;
+					<maintenance-association> $ma;
+					<local-mep> $mep;
+					<remote-mep> $rmep;
+				}
+			}
+
+		   /*
+		    * DEBUG
+		    * <output> jcs:printf("DEBUG: sla: ") _ $sla;
+		    * <output> jcs:printf("DEBUG: md: ") _ $md;
+		    * <output> jcs:printf("DEBUG: ma: ") _ $ma;
+		    * <output> jcs:printf("DEBUG: mep: ") _ $mep;
+		    * <output> jcs:printf("DEBUG: rmep: ") _ $rmep;
+			*/
+			
+			var $rpc-oam-res = jcs:execute($connection, $rpc-oam-get-sla-statistics);
+
+			if ($rpc-oam-res/cfm-entry/cfm-iter-ethdm-entry) {
+
+			    /* DEBUG
+				 * <output> jcs:printf("DEBUG: extracting information for measurement-type two-way-delay");
+				 */
+
+				var $dmm-sent = $rpc-oam-res/cfm-entry/cfm-iter-ethdm-entry/cfm-dmm-sent;
+				var $dmm-received = $rpc-oam-res/cfm-entry/cfm-iter-ethdm-entry/cfm-dmr-received;
+				var $avg-twowaydelay = $rpc-oam-res/cfm-entry/cfm-iter-ethdm-entry/cfm-average-twoway-delay;
+				var $avg-twowaydelay-variation = $rpc-oam-res/cfm-entry/cfm-iter-ethdm-entry/cfm-average-twoway-delay-variation;
+				var $avg-oneway-fwd-delay-variation = $rpc-oam-res/cfm-entry/cfm-iter-ethdm-entry/cfm-average-oneway-fwd-delay-variation;
+				var $avg-oneway-bkwd-delay-variation = $rpc-oam-res/cfm-entry/cfm-iter-ethdm-entry/cfm-average-oneway-bkwd-delay-variation;
+
+			   /* DEBUG
+			    * <output> jcs:printf("DEBUG: dmm-sent: ") _ $dmm-sent;
+			    * <output> jcs:printf("DEBUG: dmm-received: ") _ $dmm-received;
+			    * <output> jcs:printf("DEBUG: avg-twowaydelay: ") _ $avg-twowaydelay;
+			    * <output> jcs:printf("DEBUG: avg-twowaydelay-variation: ") _ $avg-twowaydelay-variation;
+			    * <output> jcs:printf("DEBUG: avg-oneway-fwd-delay-variation: ") _ $avg-oneway-fwd-delay-variation;
+			    * <output> jcs:printf("DEBUG: avg-oneway-bkwd-delay-variation: ") _ $avg-oneway-fwd-delay-variation;
+				*/
+	
+				var $rpc-mib-dmm-sent = <request-snmp-utility-mib-set> {
+					<object-type> "integer";
+					<instance> "oam." _ $md _ "." _ $ma _ "." _ $mep _ "." _ $sla _ "." _ $rmep _ ".dmm-sent";
+					<object-value> $dmm-sent;
+				}
+				var $rpc-mib-dmm-sent-res = jcs:execute($connection, $rpc-mib-dmm-sent);
+			   /* DEBUG
+			    * <output> jcs:printf("DEBUG: populated MIB for dmm-set ");
+				*/
+	
+				var $rpc-mib-dmm-received = <request-snmp-utility-mib-set> {
+					<object-type> "integer";
+					<instance> "oam." _ $md _ "." _ $ma _ "." _ $mep _ "." _ $sla _ "." _ $rmep _ ".dmm-received";
+					<object-value> $dmm-received;
+				}
+				var $rpc-mib-dmm-received-res = jcs:execute($connection, $rpc-mib-dmm-received);
+			   /* DEBUG
+			    * <output> jcs:printf("DEBUG: populated MIB for dmm-received ");
+			    */
+
+				var $rpc-mib-avg-twowaydelay = <request-snmp-utility-mib-set> {
+					<object-type> "integer";
+					<instance> "oam." _ $md _ "." _ $ma _ "." _ $mep _ "." _ $sla _ "." _ $rmep _ ".avg-twowaydelay";
+					<object-value> $avg-twowaydelay;
+				}
+				var $rpc-mib-avg-twowaydelay-res = jcs:execute($connection, $rpc-mib-avg-twowaydelay);
+			   /* DEBUG
+			    * <output> jcs:printf("DEBUG: populated MIB for avg-twowaydelay");
+				*/
+
+				var $rpc-mib-avg-twowaydelay-variation = <request-snmp-utility-mib-set> {
+					<object-type> "integer";
+					<instance> "oam." _ $md _ "." _ $ma _ "." _ $mep _ "." _ $sla _ "." _ $rmep _ ".avg-twowaydelay-variation";
+					<object-value> $avg-twowaydelay-variation;
+				}
+				var $rpc-mib-avg-twowaydelay-variation-res = jcs:execute($connection, $rpc-mib-avg-twowaydelay-variation);
+			   /* DEBUG
+			    * <output> jcs:printf("DEBUG: populated MIB for avg-twowaydelay-variation");
+				*/
+
+				var $rpc-mib-avg-oneway-fwd-delay-variation = <request-snmp-utility-mib-set> {
+					<object-type> "integer";
+					<instance> "oam." _ $md _ "." _ $ma _ "." _ $mep _ "." _ $sla _ "." _ $rmep _ ".avg-oneway-fwd-delay-variation";
+					<object-value> $avg-oneway-fwd-delay-variation;
+				}
+				var $rpc-mib-avg-oneway-fwd-delay-variation-res = jcs:execute($connection, $rpc-mib-avg-oneway-fwd-delay-variation);
+			   /* DEBUG
+			    * <output> jcs:printf("DEBUG: populated MIB for avg-oneway-fwd-delay-variation");
+				*/
+
+				var $rpc-mib-avg-oneway-bkwd-delay-variation = <request-snmp-utility-mib-set> {
+					<object-type> "integer";
+					<instance> "oam." _ $md _ "." _ $ma _ "." _ $mep _ "." _ $sla _ "." _ $rmep _ ".avg-oneway-bkwd-delay-variation";
+					<object-value> $avg-oneway-bkwd-delay-variation;
+				}
+				var $rpc-mib-avg-oneway-bkwd-delay-variation-res = jcs:execute($connection, $rpc-mib-avg-oneway-bkwd-delay-variation);
+			   /* DEBUG
+			    * <output> jcs:printf("DEBUG: populated MIB for avg-oneway-bkwd-delay-variation");
+				*/
+			}
+
+			if ($rpc-oam-res/cfm-entry/cfm-iter-ethslm-entry) {
+
+			    /* DEBUG
+				 * <output> jcs:printf("DEBUG: extracting information for measurement-type slm");
+				 */
+								
+				var $slm-sent = $rpc-oam-res/cfm-entry/cfm-iter-ethslm-entry/cfm-slm-sent;
+				var $slm-received = $rpc-oam-res/cfm-entry/cfm-iter-ethslm-entry/cfm-slr-received;
+				var $slm-near-end-loss = $rpc-oam-res/cfm-entry/cfm-iter-ethslm-entry/cfm-slm-last-measured-near-end-slm-loss-stats;
+				var $slm-near-end-loss-percent = $rpc-oam-res/cfm-entry/cfm-iter-ethslm-entry/cfm-slm-last-measured-near-end-slm-loss-stats-percent;
+				var $slm-far-end-loss = $rpc-oam-res/cfm-entry/cfm-iter-ethslm-entry/cfm-slm-last-measured-far-end-slm-loss-stats;
+				var $slm-far-end-loss-percent = $rpc-oam-res/cfm-entry/cfm-iter-ethslm-entry/cfm-slm-last-measured-far-end-slm-loss-stats-percent;
+
+			   /* DEBUG
+			    * <output> jcs:printf("DEBUG: slm-sent: ") _ $slm-sent;
+			    * <output> jcs:printf("DEBUG: slm-received: ") _ $slm-received;
+			    * <output> jcs:printf("DEBUG: slm-near-end-loss: ") _ $slm-near-end-loss;
+			    * <output> jcs:printf("DEBUG: slm-near-end-loss-percent: ") _ $slm-near-end-loss-percent;
+			    * <output> jcs:printf("DEBUG: slm-far-end-loss: ") _ $slm-far-end-loss;
+			    * <output> jcs:printf("DEBUG: slm-far-end-loss-percent: ") _ $slm-far-end-loss-percent;
+				*/
+	
+				var $rpc-mib-slm-sent = <request-snmp-utility-mib-set> {
+					<object-type> "integer";
+					<instance> "oam." _ $md _ "." _ $ma _ "." _ $mep _ "." _ $sla _ "." _ $rmep _ ".slm-sent";
+					<object-value> $slm-sent;
+				}
+				var $rpc-mib-slm-sent-res = jcs:execute($connection, $rpc-mib-slm-sent);
+			   /* DEBUG
+			    * <output> jcs:printf("DEBUG: populated MIB for slm-sent ");
+				*/
+
+				var $rpc-mib-slm-received = <request-snmp-utility-mib-set> {
+					<object-type> "integer";
+					<instance> "oam." _ $md _ "." _ $ma _ "." _ $mep _ "." _ $sla _ "." _ $rmep _ ".slm-received";
+					<object-value> $slm-received;
+				}
+				var $rpc-mib-slm-received-res = jcs:execute($connection, $rpc-mib-slm-received);
+			   /* DEBUG
+			    * <output> jcs:printf("DEBUG: populated MIB for slm-received");
+				*/
+
+				var $rpc-mib-near-end-loss = <request-snmp-utility-mib-set> {
+					<object-type> "integer";
+					<instance> "oam." _ $md _ "." _ $ma _ "." _ $mep _ "." _ $sla _ "." _ $rmep _ ".near-end-loss";
+					<object-value> $slm-near-end-loss;
+				}
+				var $rpc-mib-near-end-loss-res = jcs:execute($connection, $rpc-mib-near-end-loss);
+			   /* DEBUG
+			    * <output> jcs:printf("DEBUG: populated MIB for slm-near-end-loss");
+				*/
+
+				var $rpc-mib-near-end-loss-percent = <request-snmp-utility-mib-set> {
+					<object-type> "integer";
+					<instance> "oam." _ $md _ "." _ $ma _ "." _ $mep _ "." _ $sla _ "." _ $rmep _ ".near-end-loss-percent";
+					<object-value> $slm-near-end-loss-percent;
+				}
+				var $rpc-mib-near-end-loss-percent-res = jcs:execute($connection, $rpc-mib-near-end-loss-percent);
+			   /* DEBUG
+			    * <output> jcs:printf("DEBUG: populated MIB for slm-near-end-loss-percent");
+				*/
+
+				var $rpc-mib-far-end-loss = <request-snmp-utility-mib-set> {
+					<object-type> "integer";
+					<instance> "oam." _ $md _ "." _ $ma _ "." _ $mep _ "." _ $sla _ "." _ $rmep _ ".far-end-loss";
+					<object-value> $slm-far-end-loss;
+				}
+				var $rpc-mib-far-end-loss-res = jcs:execute($connection, $rpc-mib-far-end-loss);
+			   /* DEBUG
+			    * <output> jcs:printf("DEBUG: populated MIB for slm-far-end-loss");
+				*/
+
+				var $rpc-mib-far-end-loss-percent = <request-snmp-utility-mib-set> {
+					<object-type> "integer";
+					<instance> "oam." _ $md _ "." _ $ma _ "." _ $mep _ "." _ $sla _ "." _ $rmep _ ".far-end-loss-percent";
+					<object-value> $slm-far-end-loss-percent;
+				}
+				var $rpc-mib-far-end-loss-percent-res = jcs:execute($connection, $rpc-mib-far-end-loss-percent);
+			   /* DEBUG
+			    * <output> jcs:printf("DEBUG: populated MIB for slm-far-end-loss-percent");
+				*/
+			}
+		}
+	}
+}

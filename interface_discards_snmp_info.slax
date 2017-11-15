@@ -1,0 +1,52 @@
+version 1.0;
+
+ns junos = "http://xml.juniper.net/junos/*/junos";
+ns xnm = "http://xml.juniper.net/xnm/1.1/xnm";
+ns jcs = "http://xml.juniper.net/junos/commit-scripts/1.0";
+
+
+import "../import/junos.xsl";
+
+match / {
+    <op-script-results> {
+    
+    	var $arguments = {
+    		<argument> {
+    			<name> "interface";
+    			<description> "Mandatory: interface name. E.g. xe-1/1/0";
+    		}
+    	}
+
+		var $rpc2 = { 
+			<get-interface-information>;
+			<extensive>;
+			<interface-name> $interface;
+		}
+		var $res2 = jcs:invoke($rpc2);
+		
+		/*
+		 * The discards are inside interface-information/physical-information/input-error-list/input-discards
+		 * The discards are inside interface-information/physical-information/output-error-list/output-discards
+		 */
+
+		 var $input-discards = $res2/interface-information/physical-information/input-error-list/input-discards;
+		 var $output-discards = $res2/interface-information/physical-information/output-error-list/output-discards;
+		 var $interface-snmp-index = $res2/interface-information/physical-information/snmp-index;
+
+
+		var $rpc3 = <request-snmp-utility-mib-set> {
+			<object-type> "unsigned-integer";
+			<instance> "ifTable.ifEntry.ifInDiscards." _ $interface-snmp-index;
+			<object-value> $input-discards;
+		}
+		var $res3 = jcs:invoke($rpc3);
+
+
+		var $rpc14 = <request-snmp-utility-mib-set> {
+			<object-type> "unsigned-integer";
+			<instance> "ifTable.ifEntry.ifOutDiscards.ifOutDiscards." _ $interface-snmp-index;
+			<object-value> $output-discards;
+		}
+		var $res14 = jcs:invoke($rpc14);
+	}
+}
